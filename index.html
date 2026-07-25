@@ -5,10 +5,1701 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hot Potato — Bomb Pass</title>
 <style>
-  /* design and styles omitted for brevity in API payload, full file identical to workspace */
+  /* ============================================================
+     DESIGN TOKENS
+     A blast-radius palette: near-black charcoal base, a live-wire
+     lime for "armed" state, a klaxon orange for rising danger,
+     and a flat blood-red for detonation. Typography leans on
+     heavy, condensed system faces — the kind stamped on ordnance
+     crates — kept to a strict scale so the one dramatic gesture
+     (the bomb, its fuse, the flash) is what people remember.
+     ============================================================ */
+  :root{
+    --bg:            #090b10;
+    --bg-alt:        #0f1320;
+    --panel:         #141926;
+    --panel-line:    #232a3d;
+    --text:          #eef1f7;
+    --muted:         #7c8698;
+    --lime:          #c8ff3d;
+    --lime-dim:      #7ea62a;
+    --orange:        #ff7a1f;
+    --red:           #ff2e4d;
+    --red-deep:      #7a0a1c;
+    --focus:         #6cd6ff;
+
+    --font-display: "Archivo Black","Arial Black","Helvetica Neue",Impact,sans-serif;
+    --font-body:    -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Inter",sans-serif;
+    --font-mono:    "SFMono-Regular","Consolas","Liberation Mono",Menlo,monospace;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    min-height:100svh;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% -10%, #1a2036 0%, transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  :focus-visible{
+    outline:3px solid var(--focus);
+    outline-offset:3px;
+  }
+
+  .app{
+    position:relative;
+    width:100%;
+    max-width:520px;
+  }
+
+  /* ---------- Screen switcher ---------- */
+  .screen{
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+    animation:screen-in .45s ease both;
+  }
+  .screen.active{ display:flex; }
+  @keyframes screen-in{
+    from{ opacity:0; transform:translateY(10px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+
+  /* ============================================================
+     IDLE SCREEN
+     ============================================================ */
+  .eyebrow{
+    font-family:var(--font-mono);
+    letter-spacing:.35em;
+    text-transform:uppercase;
+    font-size:12px;
+    color:var(--lime);
+    margin:0 0 10px;
+  }
+
+  .logo{
+    font-family:var(--font-display);
+    font-size:clamp(38px,9vw,58px);
+    line-height:.92;
+    margin:0 0 6px;
+    letter-spacing:-.01em;
+    text-transform:uppercase;
+  }
+  .logo .accent{ color:var(--lime); }
+
+  .tagline{
+    color:var(--muted);
+    font-size:15px;
+    max-width:38ch;
+    margin:0 0 32px;
+    line-height:1.5;
+  }
+
+  .settings-panel{
+    width:100%;
+    background:linear-gradient(180deg,var(--panel),var(--bg-alt));
+    border:1px solid var(--panel-line);
+    border-radius:16px;
+    padding:22px 22px 8px;
+    margin-bottom:28px;
+    text-align:left;
+  }
+
+  .settings-title{
+    font-family:var(--font-mono);
+    font-size:12px;
+    letter-spacing:.25em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0 0 18px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .settings-title::before{
+    content:"";
+    width:6px; height:6px; border-radius:50%;
+    background:var(--lime);
+    box-shadow:0 0 8px var(--lime);
+  }
+  .settings-title.second{ margin-top:4px; }
+
+  .field-row{
+    display:flex;
+    gap:14px;
+    margin-bottom:18px;
+  }
+  .field{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .field label{
+    font-size:12px;
+    color:var(--muted);
+    display:flex;
+    justify-content:space-between;
+  }
+  .field label .unit{ color:var(--panel-line); }
+
+  .field input[type="number"]{
+    width:100%;
+    background:var(--bg);
+    border:1px solid var(--panel-line);
+    border-radius:10px;
+    color:var(--text);
+    font-family:var(--font-mono);
+    font-size:18px;
+    padding:10px 12px;
+    transition:border-color .15s ease;
+  }
+  .field input[type="number"]:focus{
+    border-color:var(--lime);
+  }
+  .field input[type=number]::-webkit-inner-spin-button{ opacity:.4; }
+
+  .field select,
+  .field textarea{
+    width:100%;
+    background:var(--bg);
+    border:1px solid var(--panel-line);
+    border-radius:10px;
+    color:var(--text);
+    font-family:var(--font-mono);
+    font-size:16px;
+    padding:10px 12px;
+    transition:border-color .15s ease;
+  }
+  .field select:focus,
+  .field textarea:focus{
+    border-color:var(--lime);
+  }
+  .field textarea{
+    min-height:96px;
+    resize:vertical;
+  }
+
+  .status-panel{
+    margin:8px 0 16px;
+    padding:12px 12px 10px;
+    border:1px solid var(--panel-line);
+    border-radius:12px;
+    background:rgba(255,255,255,.03);
+  }
+  .status-title{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:.24em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:8px;
+  }
+  .status-line{
+    font-size:13px;
+    line-height:1.5;
+    color:var(--text);
+  }
+  .player-list{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:10px;
+  }
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    padding:6px 9px;
+    border-radius:999px;
+    font-size:12px;
+    background:rgba(255,255,255,.06);
+    color:var(--muted);
+    border:1px solid rgba(255,255,255,.08);
+  }
+  .pill.active{ color:var(--lime); border-color:rgba(200,255,61,.25); }
+  .pill.out{ color:var(--red); border-color:rgba(255,46,77,.25); }
+
+  button, input, select, textarea{
+    touch-action:manipulation;
+  }
+  button{ min-height:48px; }
+
+  .switch-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:14px 2px;
+    border-top:1px solid var(--panel-line);
+  }
+  .switch-row .switch-copy{ text-align:left; }
+  .switch-row .switch-copy .title{ font-size:14px; font-weight:600; }
+  .switch-row .switch-copy .desc{ font-size:12px; color:var(--muted); margin-top:2px; }
+
+  .switch{
+    position:relative;
+    width:46px;
+    height:26px;
+    flex:none;
+  }
+  .switch input{
+    position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer;
+  }
+  .switch .track{
+    position:absolute; inset:0;
+    background:var(--bg);
+    border:1px solid var(--panel-line);
+    border-radius:999px;
+    transition:background .2s ease, border-color .2s ease;
+  }
+  .switch .thumb{
+    position:absolute; top:3px; left:3px;
+    width:18px; height:18px; border-radius:50%;
+    background:var(--muted);
+    transition:transform .2s ease, background .2s ease;
+  }
+  .switch input:checked + .track{ background:rgba(200,255,61,.12); border-color:var(--lime-dim); }
+  .switch input:checked + .track .thumb{ transform:translateX(20px); background:var(--lime); }
+
+  .volume-row{
+    padding:14px 2px 18px;
+    border-top:1px solid var(--panel-line);
+    text-align:left;
+  }
+  .volume-row label{
+    font-size:12px; color:var(--muted);
+    display:flex; justify-content:space-between; margin-bottom:10px;
+  }
+  input[type="range"]{
+    -webkit-appearance:none;
+    width:100%;
+    height:6px;
+    border-radius:999px;
+    background:var(--panel-line);
+    outline:none;
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:20px; height:20px; border-radius:50%;
+    background:var(--lime);
+    box-shadow:0 0 0 4px rgba(200,255,61,.15);
+    cursor:pointer;
+    margin-top:-7px;
+  }
+  input[type="range"]::-moz-range-thumb{
+    width:20px; height:20px; border-radius:50%; border:none;
+    background:var(--lime);
+    box-shadow:0 0 0 4px rgba(200,255,61,.15);
+    cursor:pointer;
+  }
+  input[type="range"]::-moz-range-track{
+    height:6px; border-radius:999px; background:var(--panel-line);
+  }
+
+  /* Slider meta display */
+  .field-row .unit span{ color:var(--muted); font-family:var(--font-mono); }
+
+  .demo-timeline{
+    height:36px;
+    border-radius:8px;
+    background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border:1px solid var(--panel-line);
+    position:relative;
+    overflow:hidden;
+    margin-top:8px;
+  }
+  .demo-interval{
+    position:absolute;
+    bottom:0;
+    height:100%;
+    background:linear-gradient(180deg,var(--lime),var(--lime-dim));
+    opacity:0.95;
+    border-left:1px solid rgba(0,0,0,0.08);
+    cursor:default;
+  }
+  .demo-interval::after{
+    content:attr(data-tip);
+    position:absolute;
+    bottom:100%;
+    left:50%;
+    transform:translateX(-50%) translateY(-6px);
+    background:rgba(10,10,10,0.95);
+    color:var(--text);
+    padding:6px 8px;
+    border-radius:6px;
+    font-size:12px;
+    white-space:nowrap;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .12s ease;
+  }
+  .demo-interval:hover::after{ opacity:1; }
+
+  .snackbar{
+    position:fixed;
+    left:50%;
+    bottom:22px;
+    transform:translateX(-50%);
+    background:rgba(10,10,10,0.95);
+    color:var(--text);
+    padding:10px 14px;
+    border-radius:8px;
+    font-size:13px;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .18s ease, transform .2s ease;
+    z-index:60;
+  }
+  .snackbar.visible{ opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(-4px); }
+  }
+
+  .field-error{
+    color:var(--red);
+    font-size:12px;
+    font-family:var(--font-mono);
+    min-height:16px;
+    margin:-8px 0 14px;
+    text-align:left;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn{
+    appearance:none;
+    border:none;
+    cursor:pointer;
+    font-family:var(--font-display);
+    letter-spacing:.03em;
+    text-transform:uppercase;
+    border-radius:14px;
+    padding:20px 32px;
+    width:100%;
+    font-size:20px;
+    transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+  }
+  .btn:active{ transform:scale(.97); }
+
+  .btn-start{
+    background:linear-gradient(180deg,var(--lime),var(--lime-dim));
+    color:#0a1400;
+    box-shadow:0 0 0 1px rgba(200,255,61,.3), 0 12px 30px -10px rgba(200,255,61,.5);
+  }
+  .btn-start:hover{ filter:brightness(1.08); }
+
+  .btn-stop{
+    background:transparent;
+    color:var(--text);
+    border:2px solid var(--panel-line);
+  }
+  .btn-stop:hover{ border-color:var(--red); color:var(--red); }
+
+  .btn-again{
+    background:linear-gradient(180deg,var(--orange),#b8390a);
+    color:#1a0800;
+    box-shadow:0 12px 30px -10px rgba(255,122,31,.55);
+  }
+  .btn-again:hover{ filter:brightness(1.08); }
+
+  .btn-ghost{
+    background:transparent;
+    color:var(--muted);
+    border:2px solid var(--panel-line);
+    margin-top:12px;
+    font-size:14px;
+    padding:14px 24px;
+  }
+  .btn-ghost:hover{ border-color:var(--red); color:var(--red); }
+
+  /* ============================================================
+     PLAYING SCREEN
+     ============================================================ */
+  .round-indicator{
+    font-family:var(--font-mono);
+    letter-spacing:.3em;
+    text-transform:uppercase;
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:18px;
+  }
+  .round-indicator span{ color:var(--lime); font-weight:700; }
+
+  .bomb-stage{
+    position:relative;
+    width:min(70vw,280px);
+    height:min(70vw,280px);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin-bottom:22px;
+  }
+
+  .pulse-ring{
+    position:absolute;
+    inset:0;
+    border-radius:50%;
+    border:2px solid var(--lime);
+    opacity:0;
+  }
+  .pulse-ring.fire{
+    animation:pulse-ring-anim var(--pulse-dur,.5s) ease-out;
+  }
+  @keyframes pulse-ring-anim{
+    0%{ transform:scale(.55); opacity:.9; border-color:var(--lime); }
+    100%{ transform:scale(1.15); opacity:0; border-color:var(--red); }
+  }
+
+  #bomb-svg{ width:100%; height:100%; overflow:visible; }
+  .bomb-shake.fire{ animation:bomb-shake var(--pulse-dur,.5s) ease-out; }
+  @keyframes bomb-shake{
+    0%{ transform:translate(0,0) rotate(0); }
+    25%{ transform:translate(-2px,1px) rotate(-1deg); }
+    50%{ transform:translate(2px,-1px) rotate(1deg); }
+    75%{ transform:translate(-1px,-1px) rotate(-.5deg); }
+    100%{ transform:translate(0,0) rotate(0); }
+  }
+
+  .timer-readout{
+    font-family:var(--font-mono);
+    font-size:14px;
+    color:var(--muted);
+    min-height:20px;
+    margin-bottom:26px;
+    letter-spacing:.05em;
+  }
+  .timer-readout.blind{ visibility:hidden; }
+
+  /* ============================================================
+     EXPLOSION SCREEN
+     ============================================================ */
+  #screen-explosion{ padding-top:10px; }
+  .boom-text{
+    font-family:var(--font-display);
+    font-size:clamp(56px,16vw,96px);
+    line-height:.9;
+    color:var(--red);
+    text-shadow:
+      0 0 20px rgba(255,46,77,.75),
+      0 0 60px rgba(255,122,31,.45);
+    margin:10px 0 6px;
+    animation:boom-pop .5s cubic-bezier(.2,1.4,.4,1) both;
+  }
+  .boom-text .emoji{ display:inline-block; margin-left:8px; }
+  @keyframes boom-pop{
+    0%{ transform:scale(.2) rotate(-6deg); opacity:0; }
+    60%{ transform:scale(1.15) rotate(2deg); opacity:1; }
+    100%{ transform:scale(1) rotate(0); }
+  }
+  .boom-sub{
+    color:var(--muted);
+    font-size:15px;
+    margin:0 0 26px;
+  }
+  .boom-sub strong{ color:var(--text); }
+
+  /* Full-viewport detonation flash */
+  #flash-overlay{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    background:radial-gradient(circle at 50% 45%, #fff 0%, var(--orange) 22%, var(--red) 48%, transparent 78%);
+    opacity:0;
+    z-index:50;
+  }
+  #flash-overlay.fire{
+    animation:screen-flash .9s cubic-bezier(.15,.8,.3,1) both;
+  }
+  @keyframes screen-flash{
+    0%{ opacity:0; }
+    6%{ opacity:1; }
+    100%{ opacity:0; }
+  }
+  body.exploded{
+    animation:body-rumble .6s ease-in-out 1;
+  }
+  @keyframes body-rumble{
+    0%,100%{ transform:translate(0,0); }
+    20%{ transform:translate(-6px,3px); }
+    40%{ transform:translate(5px,-4px); }
+    60%{ transform:translate(-4px,-2px); }
+    80%{ transform:translate(3px,4px); }
+  }
+
+  /* ============================================================
+     COUNTDOWN SCREEN (auto mode, between rounds)
+     ============================================================ */
+  .countdown-label{
+    font-family:var(--font-mono);
+    letter-spacing:.25em;
+    text-transform:uppercase;
+    font-size:13px;
+    color:var(--muted);
+    margin:0 0 10px;
+  }
+  .countdown-label strong{ color:var(--lime); }
+  .countdown-number{
+    font-family:var(--font-display);
+    font-size:clamp(80px,26vw,140px);
+    line-height:1;
+    color:var(--lime);
+    text-shadow:0 0 40px rgba(200,255,61,.45);
+    margin:6px 0 28px;
+    animation:count-pop .35s ease both;
+  }
+  @keyframes count-pop{
+    from{ transform:scale(.7); opacity:.3; }
+    to{ transform:scale(1); opacity:1; }
+  }
+
+  /* ============================================================
+     GAME COMPLETE SCREEN
+     ============================================================ */
+  .complete-title{
+    font-family:var(--font-display);
+    font-size:clamp(34px,8vw,46px);
+    color:var(--lime);
+    margin:14px 0 8px;
+    text-transform:uppercase;
+  }
+
+  footer.hint{
+    margin-top:30px;
+    font-size:11px;
+    color:var(--panel-line);
+    font-family:var(--font-mono);
+    letter-spacing:.08em;
+  }
+
+  @media (max-width: 640px){
+    body{ padding:14px; align-items:flex-start; }
+    .app{ max-width:100%; }
+    .settings-panel{ padding:18px 16px 8px; border-radius:14px; }
+    .tagline{ font-size:14px; margin-bottom:24px; }
+    .field-row{ flex-direction:column; gap:10px; margin-bottom:10px; }
+    .field{ width:100%; }
+    .btn{ padding:18px 26px; font-size:18px; border-radius:12px; min-height:56px; }
+    .btn-ghost{ padding:12px 20px; font-size:13px; }
+    .bomb-stage{ width:min(78vw,220px); height:min(78vw,220px); margin-bottom:18px; }
+    .switch-row{ padding:12px 2px; }
+  }
+
+  @media (max-width: 420px){
+    body{ padding:10px; }
+    .logo{ font-size:clamp(32px,11vw,42px); }
+    .settings-panel{ padding:16px 14px 8px; }
+    .btn{ font-size:16px; padding:14px 18px; min-height:52px; }
+    .boom-text{ font-size:clamp(44px,18vw,72px); }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
+  }
 </style>
 </head>
 <body>
-<!-- full app updated with runtime guard for SVG fuse length -->
+<div id="flash-overlay"></div>
+
+<div class="app">
+
+  <!-- ============================================================
+       IDLE SCREEN — settings + start
+       ============================================================ -->
+  <section id="screen-idle" class="screen active">
+    <p class="eyebrow">Physical Party Game</p>
+    <h1 class="logo">Hot Potato<br><span class="accent">Bomb Pass</span></h1>
+    <p class="tagline">Pass it around the circle. Nobody knows when it goes off — not even this app, until the exact moment it decides.</p>
+
+    <div class="settings-panel">
+      <p class="settings-title">Round Settings</p>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="min-duration">Minimum <span class="unit">sec</span></label>
+          <input type="number" id="min-duration" value="10" min="1" max="600" step="1" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label for="max-duration">Maximum <span class="unit">sec</span></label>
+          <input type="number" id="max-duration" value="45" min="1" max="600" step="1" inputmode="numeric">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="players-count">Players <span class="unit">= rounds</span></label>
+          <input type="number" id="players-count" value="6" min="1" max="50" step="1" inputmode="numeric">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="game-mode">Game mode <span class="unit">style</span></label>
+          <select id="game-mode">
+            <option value="classic">Classic Elimination</option>
+            <option value="survival">Last Standing</option>
+            <option value="chaos">Chaos Mode</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="player-names">Player names <span class="unit">optional</span></label>
+        <textarea id="player-names" rows="4" placeholder="Alice&#10;Bob&#10;Cara"></textarea>
+      </div>
+
+      <div class="status-panel" id="status-panel">
+        <div class="status-title">Session status</div>
+        <div class="status-line" id="status-line" role="status" aria-live="polite">Waiting to start.</div>
+        <div class="player-list" id="player-list"></div>
+      </div>
+
+      <p class="field-error" id="field-error" role="alert"></p>
+
+      <div class="switch-row">
+        <div class="switch-copy">
+          <div class="title">Blind Mode</div>
+          <div class="desc">Hide the countdown so nobody can peek</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="blind-mode-toggle">
+          <span class="track"><span class="thumb"></span></span>
+        </label>
+      </div>
+
+      <div class="switch-row">
+        <div class="switch-copy">
+          <div class="title">Auto Mode</div>
+          <div class="desc">Announce, count down 10→1, and auto-start the next round</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="auto-mode-toggle" checked>
+          <span class="track"><span class="thumb"></span></span>
+        </label>
+      </div>
+
+      <div class="volume-row">
+        <label for="volume-slider"><span>Volume</span><span id="volume-value">80%</span></label>
+        <input type="range" id="volume-slider" min="0" max="100" value="80" step="1">
+      </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="cluster-frequency">Cluster Frequency <span class="unit"><span id="cluster-frequency-value">10%</span></span></label>
+              <input type="range" id="cluster-frequency" min="0" max="100" value="10" step="1">
+            </div>
+            <div class="field">
+              <label for="pause-strength">Pause Strength <span class="unit"><span id="pause-strength-value">20%</span></span></label>
+              <input type="range" id="pause-strength" min="0" max="100" value="20" step="1">
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="cluster-size">Cluster Size <span class="unit"><span id="cluster-size-value">3</span></span></label>
+              <input type="range" id="cluster-size" min="1" max="8" value="3" step="1">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="preset-select">Presets <span class="unit"></span></label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <select id="preset-select" style="flex:1;">
+                  <option value="Default">Default</option>
+                  <option value="Intense">Intense</option>
+                  <option value="Chill">Chill</option>
+                </select>
+                <button id="btn-save-preset" type="button" class="btn btn-ghost" style="padding:8px 10px;">Save</button>
+                <button id="btn-reset-presets" type="button" class="btn btn-ghost" style="padding:8px 10px;">Reset</button>
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Demo Timeline</label>
+              <div id="demo-timeline" class="demo-timeline" aria-hidden="true"></div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="btn-save-demo" type="button" class="btn btn-ghost">Save Demo</button>
+            <button id="btn-load-demo" type="button" class="btn btn-ghost">Load Demo</button>
+            <button id="btn-export-demo" type="button" class="btn btn-ghost">Export Demo</button>
+          </div>
+    </div>
+
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button id="btn-start" type="button" class="btn btn-start" aria-label="Start game">Start Game</button>
+      <div style="display:flex; gap:8px;">
+        <button id="btn-demo-classic" type="button" class="btn btn-ghost" aria-label="Demo classic">Demo Classic</button>
+        <button id="btn-demo-survival" type="button" class="btn btn-ghost" aria-label="Demo survival">Demo Survival</button>
+        <button id="btn-demo-chaos" type="button" class="btn btn-ghost" aria-label="Demo chaos">Demo Chaos</button>
+      </div>
+    </div>
+    <footer class="hint">Tap start once — audio unlocks on that tap</footer>
+  </section>
+
+  <!-- ============================================================
+       PLAYING SCREEN — ticking bomb
+       ============================================================ -->
+  <section id="screen-playing" class="screen">
+    <p class="round-indicator">Round <span id="round-num">1</span> of <span id="round-total">6</span></p>
+
+    <div class="bomb-stage">
+      <div class="pulse-ring" id="pulse-ring"></div>
+      <svg id="bomb-svg" class="bomb-shake" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="bombBodyGrad" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stop-color="#3a4256"/>
+            <stop offset="55%" stop-color="#1c2233"/>
+            <stop offset="100%" stop-color="#0c0f18"/>
+          </radialGradient>
+          <radialGradient id="sparkGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#fff6c8"/>
+            <stop offset="45%" stop-color="#ffb02e" id="sparkMid"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </radialGradient>
+        </defs>
+
+        <circle cx="100" cy="115" r="70" fill="url(#bombBodyGrad)" stroke="#080a10" stroke-width="3"/>
+        <ellipse cx="76" cy="90" rx="18" ry="10" fill="#4a5470" opacity=".35"/>
+        <rect x="88" y="48" width="24" height="18" rx="4" fill="#2a3145" stroke="#080a10" stroke-width="2"/>
+        <path id="fusePath" d="M100,48 C104,30 128,26 122,10" fill="none" stroke="#5b4632" stroke-width="6" stroke-linecap="round"/>
+        <circle id="spark" cx="122" cy="10" r="9" fill="url(#sparkGlow)"/>
+      </svg>
+    </div>
+
+    <p class="timer-readout" id="timer-readout">armed…</p>
+    <button id="btn-stop" type="button" class="btn btn-stop" aria-label="Stop and reset game">Stop / Reset</button>
+  </section>
+
+  <!-- ============================================================
+       EXPLOSION SCREEN
+       ============================================================ -->
+  <section id="screen-explosion" class="screen">
+    <div class="boom-text">BOOM<span class="emoji">💥</span></div>
+    <p class="boom-sub" id="boom-sub">Whoever's holding it is <strong>out</strong>.</p>
+    <button id="btn-again" type="button" class="btn btn-again" aria-label="Next round">Next Round</button>
+    <button id="btn-cancel-auto" type="button" class="btn btn-ghost" style="display:none;" aria-label="Cancel auto play">Cancel Auto-Play</button>
+  </section>
+
+  <!-- ============================================================
+       COUNTDOWN SCREEN — auto mode, between rounds
+       ============================================================ -->
+  <section id="screen-countdown" class="screen">
+    <p class="countdown-label">Round <strong id="countdown-round-num">2</strong> restarting in</p>
+    <div class="countdown-number" id="countdown-number">10</div>
+    <button id="btn-cancel-countdown" type="button" class="btn btn-stop" aria-label="Cancel countdown">Cancel</button>
+  </section>
+
+  <!-- ============================================================
+       GAME COMPLETE SCREEN
+       ============================================================ -->
+  <section id="screen-complete" class="screen">
+    <p class="eyebrow">Game Over</p>
+    <h2 class="complete-title">All Rounds Complete</h2>
+    <p class="boom-sub">Everyone survived at least once. Time for a new round of victims.</p>
+    <button id="btn-new-game" type="button" class="btn btn-start" aria-label="Start new game">New Game</button>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     ELEMENT REFERENCES
+     ============================================================ */
+  const screens = {
+    idle:      document.getElementById('screen-idle'),
+    playing:   document.getElementById('screen-playing'),
+    explosion: document.getElementById('screen-explosion'),
+    countdown: document.getElementById('screen-countdown'),
+    complete:  document.getElementById('screen-complete'),
+  };
+
+  const minInput      = document.getElementById('min-duration');
+  const maxInput       = document.getElementById('max-duration');
+  const playersInput    = document.getElementById('players-count');
+  const blindToggle       = document.getElementById('blind-mode-toggle');
+  const autoToggle          = document.getElementById('auto-mode-toggle');
+  const volumeSlider          = document.getElementById('volume-slider');
+  const volumeValueEl           = document.getElementById('volume-value');
+  const fieldError                = document.getElementById('field-error');
+  const gameModeSelect            = document.getElementById('game-mode');
+  const playerNamesInput          = document.getElementById('player-names');
+  const statusLine                 = document.getElementById('status-line');
+  const playerListEl               = document.getElementById('player-list');
+  const clusterFreqEl              = document.getElementById('cluster-frequency');
+  const clusterFreqValueEl         = document.getElementById('cluster-frequency-value');
+  const pauseStrengthEl            = document.getElementById('pause-strength');
+  const pauseStrengthValueEl       = document.getElementById('pause-strength-value');
+  const clusterSizeEl              = document.getElementById('cluster-size');
+  const clusterSizeValueEl         = document.getElementById('cluster-size-value');
+  const demoTimelineEl             = document.getElementById('demo-timeline');
+  const presetSelect                = document.getElementById('preset-select');
+  const btnSavePreset               = document.getElementById('btn-save-preset');
+  const btnResetPresets             = document.getElementById('btn-reset-presets');
+  const btnSaveDemo                 = document.getElementById('btn-save-demo');
+  const btnLoadDemo                 = document.getElementById('btn-load-demo');
+  const btnExportDemo               = document.getElementById('btn-export-demo');
+  // snackbar
+  const snackbarEl                  = (function(){
+    let el = document.getElementById('snackbar');
+    if (!el){ el = document.createElement('div'); el.id = 'snackbar'; el.className='snackbar'; document.body.appendChild(el); }
+    return el;
+  })();
+
+  const btnStart = document.getElementById('btn-start');
+  const btnStop  = document.getElementById('btn-stop');
+  const btnAgain = document.getElementById('btn-again');
+  const btnCancelAuto      = document.getElementById('btn-cancel-auto');
+  const btnCancelCountdown = document.getElementById('btn-cancel-countdown');
+  const btnNewGame           = document.getElementById('btn-new-game');
+
+  const roundNumEl    = document.getElementById('round-num');
+  const roundTotalEl   = document.getElementById('round-total');
+  const timerReadout    = document.getElementById('timer-readout');
+  const pulseRing         = document.getElementById('pulse-ring');
+  const bombSvg              = document.getElementById('bomb-svg');
+  const spark                  = document.getElementById('spark');
+  const fusePath                 = document.getElementById('fusePath');
+  const flashOverlay               = document.getElementById('flash-overlay');
+  // compute fuse length defensively — some browsers or deployments
+  // may throw if SVG isn't available synchronously. Fall back to 0.
+  let fuseLen = 0;
+  try{ fuseLen = fusePath && typeof fusePath.getTotalLength === 'function' ? fusePath.getTotalLength() : 0; }catch(e){ fuseLen = 0; }
+  const boomSub                      = document.getElementById('boom-sub');
+  const countdownNumberEl               = document.getElementById('countdown-number');
+  const countdownRoundNumEl               = document.getElementById('countdown-round-num');
+
+  const fuseLen = fusePath.getTotalLength();
+
+  /* ============================================================
+     GAME STATE
+     ============================================================ */
+  let currentRound  = 1;
+  let totalRounds   = 6;
+  let isPlaying     = false;
+  let roundDuration = 0;      // seconds, randomized fresh every round
+  let roundStartMs  = 0;      // performance.now() at round start
+  let beepTimeoutId = null;
+  let rafId          = null;
+  let sequenceTimeouts = [];  // pending timeouts for the auto explosion->countdown->next-round chain
+  let gameMode = 'classic';
+  let playerNames = [];
+  let activePlayers = [];
+  let eliminationHistory = [];
+  // Beep pattern state: 'normal' | 'cluster' | 'pause'
+  let beepPattern = { type: 'normal', remaining: 0, pauseFactor: 1, clusterInterval: 0.12 };
+
+  // Beeping engine bounds — tune here to change the suspense curve.
+  const BEEP_INTERVAL_START = 1.00;  // seconds between beeps at 0% elapsed
+  const BEEP_INTERVAL_END   = 0.15;  // seconds between beeps near 100% elapsed
+  const BEEP_FREQ_START     = 560;   // Hz — pitch at round start
+  const BEEP_FREQ_END       = 1040;  // Hz — pitch just before detonation
+
+  function clearSequenceTimeouts(){
+    sequenceTimeouts.forEach(clearTimeout);
+    sequenceTimeouts = [];
+  }
+
+  /* ============================================================
+     TRUE RANDOMNESS
+     Math.random() alone is fine for a party game, but its output
+     can start to feel "clustered" over many rounds because it's a
+     single deterministic PRNG stream. We instead pull raw entropy
+     straight from the browser's CSPRNG (crypto.getRandomValues)
+     wherever available, which is what makes each round's fuse
+     length genuinely unpredictable rather than just "random-ish."
+     ============================================================ */
+  function randomUnit(){
+    if (window.crypto && window.crypto.getRandomValues){
+      const buf = new Uint32Array(1);
+      window.crypto.getRandomValues(buf);
+      return buf[0] / 4294967296; // 2^32 -> [0,1)
+    }
+    return Math.random();
+  }
+
+  function randomDuration(min, max){
+    return min + randomUnit() * (max - min);
+  }
+
+  function escapeHtml(value){
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function triggerHaptic(pattern){
+    if (navigator.vibrate){
+      navigator.vibrate(pattern);
+    }
+  }
+
+  function buildPlayerNames(settings){
+    const count = Math.max(1, Math.floor(settings.players));
+    const rawNames = playerNamesInput.value
+      .split(/\r?\n|,/)
+      .map(function(item){ return item.trim(); })
+      .filter(Boolean);
+
+    const names = [];
+    rawNames.slice(0, count).forEach(function(name){
+      if (name){ names.push(name); }
+    });
+
+    while (names.length < count){
+      names.push('Player ' + (names.length + 1));
+    }
+
+    return names.slice(0, count);
+  }
+
+  function renderStatusPanel(){
+    if (!statusLine || !playerListEl) return;
+
+    if (!playerNames.length){
+      statusLine.innerHTML = 'Waiting to start.';
+      playerListEl.innerHTML = '<span class="pill active">Ready when you are</span>';
+      return;
+    }
+
+    const chips = [];
+    const visiblePlayers = activePlayers.length ? activePlayers : playerNames;
+
+    visiblePlayers.forEach(function(name){
+      chips.push('<span class="pill active">' + escapeHtml(name) + '</span>');
+    });
+
+    eliminationHistory.forEach(function(name){
+      chips.push('<span class="pill out">' + escapeHtml(name) + '</span>');
+    });
+
+    if (activePlayers.length){
+      statusLine.innerHTML = 'Current holder: <strong>' + escapeHtml(activePlayers[0]) + '</strong>';
+    } else if (eliminationHistory.length){
+      statusLine.innerHTML = 'Last out: <strong>' + escapeHtml(eliminationHistory[eliminationHistory.length - 1]) + '</strong>';
+    } else {
+      statusLine.innerHTML = 'Ready to play.';
+    }
+
+    playerListEl.innerHTML = chips.join('');
+  }
+
+  function getModeConfig(modeOverride){
+    const m = modeOverride || gameMode;
+    if (m === 'survival'){
+      return { jitter:0.65, lateJitter:0.25, minInterval:0.1, maxInterval:1.3 };
+    }
+    if (m === 'chaos'){
+      return { jitter:1.2, lateJitter:0.3, minInterval:0.06, maxInterval:1.45 };
+    }
+    return { jitter:0.45, lateJitter:0.12, minInterval:0.08, maxInterval:1.6 };
+  }
+
+  function decideNextPattern(progress){
+    const mode = getModeConfig();
+    const r = randomUnit();
+
+    // slider-influenced tuning (persisted in localStorage)
+    const clusterFreq = clusterFreqEl ? Number(clusterFreqEl.value) / 100 : 0.10; // 0..1
+    const pauseStrength = pauseStrengthEl ? Number(pauseStrengthEl.value) / 100 : 0.20; // 0..1
+    const clusterSize = clusterSizeEl ? Math.max(1, Number(clusterSizeEl.value)) : 3;
+
+    // base probabilities influenced by progress
+    const pClusterBase = 0.06 + Math.min(0.28, progress * 0.3);
+    const pPauseBase = 0.04 + Math.max(0, (0.5 - progress) * 0.06);
+
+    const pCluster = pClusterBase * (0.5 + clusterFreq * 1.5);
+    const pPause = pPauseBase * (0.5 + pauseStrength * 1.8);
+
+    if (r < pCluster){
+      // rapid short cluster of beeps
+      beepPattern.type = 'cluster';
+      beepPattern.remaining = Math.max(1, Math.round(clusterSize * (0.8 + randomUnit() * 0.8))); // scale by slider
+      beepPattern.clusterInterval = Math.max(0.04, mode.minInterval * 0.28 + randomUnit() * 0.14);
+      beepPattern.pauseFactor = 1;
+    } else if (r < pCluster + pPause){
+      // a longer pause before the next beep
+      beepPattern.type = 'pause';
+      beepPattern.remaining = 1;
+      beepPattern.pauseFactor = 1.6 + pauseStrength * 2.8; // stronger pause with slider
+      beepPattern.clusterInterval = 0.12;
+    } else {
+      beepPattern.type = 'normal';
+      beepPattern.remaining = 1;
+      beepPattern.pauseFactor = 1;
+      beepPattern.clusterInterval = 0.12;
+    }
+  }
+
+  /* ============================================================
+     SPEECH ANNOUNCEMENTS
+     Uses the browser's built-in SpeechSynthesis API — no audio
+     files, nothing to download. Every announcement cancels
+     whatever's still queued so callouts never stack up and lag
+     behind the actual game state.
+     ============================================================ */
+  function speak(text){
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.05;
+    utter.pitch = 1.0;
+    utter.volume = Number(volumeSlider.value) / 100;
+    window.speechSynthesis.speak(utter);
+  }
+
+  /* ============================================================
+     WEB AUDIO ENGINE — synthesized in-browser, zero dependencies.
+     ============================================================ */
+  let audioCtx   = null;
+  let masterGain = null;
+
+  function ensureAudio(){
+    if (!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = Number(volumeSlider.value) / 100;
+      masterGain.connect(audioCtx.destination);
+    }
+    // Must resume synchronously inside a user-gesture handler
+    // (the Start click) to satisfy browser autoplay policy.
+    if (audioCtx.state === 'suspended'){
+      audioCtx.resume();
+    }
+  }
+
+  /**
+   * playBeep(progress) — a short square-wave burst shaped by a fast
+   * attack + exponential decay envelope, pitch rising with progress.
+   */
+  function playBeep(progress){
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = 'square';
+    const freq = BEEP_FREQ_START + (BEEP_FREQ_END - BEEP_FREQ_START) * progress;
+    osc.frequency.setValueAtTime(freq, now);
+
+    const peak = 0.35;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start(now);
+    osc.stop(now + 0.13);
+    // Mobile haptic cue to make beeps feel tactile.
+    try{ triggerHaptic(8); }catch(e){}
+  }
+
+  /**
+   * playExplosion() — filtered white-noise crack (procedural
+   * AudioBuffer through a low-pass filter with an exponential
+   * cutoff sweep) layered with a sub-bass thump for physical weight.
+   */
+  function playExplosion(){
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+
+    const duration = 1.4;
+    const bufferSize = Math.floor(audioCtx.sampleRate * duration);
+    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++){
+      const taper = 1 - (i / bufferSize);
+      data[i] = (Math.random() * 2 - 1) * taper;
+    }
+
+    const noiseSource = audioCtx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    const noiseFilter = audioCtx.createBiquadFilter();
+    noiseFilter.type = 'lowpass';
+    noiseFilter.frequency.setValueAtTime(5200, now);
+    noiseFilter.frequency.exponentialRampToValueAtTime(70, now + 1.1);
+    noiseFilter.Q.value = 0.7;
+
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0.9, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noiseSource.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    noiseSource.start(now);
+    noiseSource.stop(now + duration);
+
+    const sub = audioCtx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(95, now);
+    sub.frequency.exponentialRampToValueAtTime(38, now + 0.5);
+
+    const subGain = audioCtx.createGain();
+    subGain.gain.setValueAtTime(0.0001, now);
+    subGain.gain.exponentialRampToValueAtTime(1.0, now + 0.02);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+    sub.connect(subGain);
+    subGain.connect(masterGain);
+    sub.start(now);
+    sub.stop(now + 1.3);
+  }
+
+  /* ============================================================
+     TIMER / BEEP SCHEDULING
+     ============================================================ */
+  function lerp(a, b, t){ return a + (b - a) * t; }
+
+  function getNextBeepInterval(progress, modeOverride){
+    const mode = getModeConfig(modeOverride);
+    const baseInterval = lerp(BEEP_INTERVAL_START, BEEP_INTERVAL_END, Math.pow(Math.min(progress, 1), 1.6));
+    const jitterFactor = 0.55 + randomUnit() * mode.jitter;
+    const latePhaseJitter = progress > 0.8 ? 0.05 + randomUnit() * mode.lateJitter : 0;
+    return Math.max(mode.minInterval, Math.min(mode.maxInterval, baseInterval * jitterFactor + latePhaseJitter));
+  }
+
+  function scheduleNextBeep(){
+    if (!isPlaying) return;
+
+    const elapsedSec = (performance.now() - roundStartMs) / 1000;
+    const t = Math.min(elapsedSec / roundDuration, 1);
+    if (t >= 1) return;
+
+    // Decide a new pattern occasionally if the current pattern has exhausted
+    if (!beepPattern || beepPattern.remaining <= 1){
+      decideNextPattern(t);
+    }
+
+    let intervalSec;
+    if (beepPattern.type === 'cluster' && beepPattern.remaining > 0){
+      intervalSec = beepPattern.clusterInterval || Math.max(0.05, getNextBeepInterval(t) * 0.28);
+    } else if (beepPattern.type === 'pause'){
+      intervalSec = getNextBeepInterval(t) * (beepPattern.pauseFactor || 1.8);
+    } else {
+      intervalSec = getNextBeepInterval(t);
+    }
+
+    beepTimeoutId = setTimeout(function(){
+      if (!isPlaying) return;
+      const nowElapsed = (performance.now() - roundStartMs) / 1000;
+      const nowT = Math.min(nowElapsed / roundDuration, 1);
+      if (nowT >= 1) return;
+
+      playBeep(nowT);
+      firePulse(intervalSec);
+
+      // decrement cluster/pause counters so patterns naturally expire
+      if (beepPattern && beepPattern.remaining > 0){
+        try{ beepPattern.remaining = Math.max(0, beepPattern.remaining - 1); }catch(e){}
+        if (beepPattern.remaining <= 0){
+          beepPattern.type = 'normal';
+        }
+      }
+
+      scheduleNextBeep();
+    }, intervalSec * 1000);
+  }
+
+  function gameLoop(){
+    if (!isPlaying) return;
+
+    const elapsedSec = (performance.now() - roundStartMs) / 1000;
+    const t = Math.min(elapsedSec / roundDuration, 1);
+
+    updateFuseVisual(t);
+    if (!blindToggle.checked){
+      timerReadout.textContent = Math.max(0, roundDuration - elapsedSec).toFixed(1) + 's remaining';
+    }
+
+    if (t >= 1){
+      explode();
+      return;
+    }
+    rafId = requestAnimationFrame(gameLoop);
+  }
+
+  function firePulse(intervalSec){
+    pulseRing.style.setProperty('--pulse-dur', Math.min(intervalSec, 0.9) + 's');
+    bombSvg.style.setProperty('--pulse-dur', Math.min(intervalSec, 0.5) + 's');
+    pulseRing.classList.remove('fire');
+    bombSvg.classList.remove('fire');
+    void pulseRing.offsetWidth;
+    pulseRing.classList.add('fire');
+    bombSvg.classList.add('fire');
+    // Brief vibration on visual pulse for mobile devices
+    try{ triggerHaptic([12]); }catch(e){}
+  }
+
+  function updateFuseVisual(t){
+    try{
+      if (fusePath && fuseLen > 0){
+        const point = fusePath.getPointAtLength(fuseLen * Math.min(t, 1));
+        if (spark){ spark.setAttribute('cx', point.x); spark.setAttribute('cy', point.y); }
+        const r = lerp(6, 13, t);
+        if (spark) spark.setAttribute('r', r.toFixed(1));
+        const sparkMid = document.getElementById('sparkMid');
+        if (sparkMid) sparkMid.setAttribute('stop-color', t > 0.75 ? '#ff5a1f' : '#ffb02e');
+      }
+    }catch(e){ /* ignore visual update errors */ }
+  }
+
+  /* ============================================================
+     SCREEN / STATE TRANSITIONS
+     ============================================================ */
+  function showScreen(name){
+    Object.keys(screens).forEach(function(key){
+      screens[key].classList.toggle('active', key === name);
+    });
+  }
+
+  function validateSettings(){
+    const min = Number(minInput.value);
+    const max = Number(maxInput.value);
+    const players = Number(playersInput.value);
+
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min < 1 || max < 1){
+      fieldError.textContent = 'Enter positive numbers for min/max duration.';
+      return null;
+    }
+    if (min >= max){
+      fieldError.textContent = 'Minimum duration must be less than maximum.';
+      return null;
+    }
+    if (!Number.isFinite(players) || players < 1){
+      fieldError.textContent = 'Enter at least 1 player.';
+      return null;
+    }
+    fieldError.textContent = '';
+    return { min, max, players: Math.floor(players) };
+  }
+
+  function beginGame(){
+    const settings = validateSettings();
+    if (!settings) return;
+
+    ensureAudio(); // must run inside this click handler to satisfy autoplay policy
+
+    gameMode = gameModeSelect.value;
+    playerNames = buildPlayerNames(settings);
+    activePlayers = playerNames.slice();
+    eliminationHistory = [];
+    totalRounds  = settings.players;
+    currentRound = 1;
+    renderStatusPanel();
+    triggerHaptic([15, 25, 15]);
+    startRound(settings);
+  }
+
+  function startRound(settingsOverride){
+    const settings = settingsOverride || validateSettings();
+    if (!settings) return;
+
+    ensureAudio();
+
+    // Fresh, high-entropy random duration every single round — the
+    // core guarantee that nobody, including this app's own UI, can
+    // predict when the bomb goes off.
+    roundDuration = randomDuration(settings.min, settings.max);
+    roundStartMs  = performance.now();
+    isPlaying     = true;
+
+    roundNumEl.textContent = String(currentRound);
+    renderStatusPanel();
+    roundTotalEl.textContent = String(totalRounds);
+    timerReadout.classList.toggle('blind', blindToggle.checked);
+    timerReadout.textContent = blindToggle.checked ? 'armed…' : roundDuration.toFixed(1) + 's remaining';
+
+    updateFuseVisual(0);
+    showScreen('playing');
+    speak('Round ' + currentRound + ' of ' + totalRounds + '. Bomb armed.');
+
+    scheduleNextBeep();
+    rafId = requestAnimationFrame(gameLoop);
+  }
+
+  function stopAndReset(){
+    isPlaying = false;
+    clearTimeout(beepTimeoutId);
+    cancelAnimationFrame(rafId);
+    clearSequenceTimeouts();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    pulseRing.classList.remove('fire');
+    bombSvg.classList.remove('fire');
+    playerNames = [];
+    activePlayers = [];
+    eliminationHistory = [];
+    currentRound = 1;
+    renderStatusPanel();
+    showScreen('idle');
+  }
+
+  // Demo playback — short, non-destructive audition of the selected mode.
+  let demoTimeouts = [];
+  function clearDemo(){
+    demoTimeouts.forEach(clearTimeout);
+    demoTimeouts = [];
+  }
+
+  // Demo timeline rendering helpers
+  let demoIntervals = [];
+  function clearDemoTimeline(){
+    demoIntervals = [];
+    if (demoTimelineEl) demoTimelineEl.innerHTML = '';
+  }
+  function addDemoInterval(offsetMs, durMs){
+    demoIntervals.push({ t: offsetMs, d: durMs });
+    renderDemoTimeline();
+  }
+  function renderDemoTimeline(){
+    if (!demoTimelineEl) return;
+    demoTimelineEl.innerHTML = '';
+    const total = demoIntervals.length ? Math.max(demoIntervals[demoIntervals.length-1].t + demoIntervals[demoIntervals.length-1].d, 1) : 1;
+    demoIntervals.forEach(function(item){
+      const left = (item.t / total) * 100;
+      const width = Math.max(0.5, (item.d / total) * 100);
+      const span = document.createElement('div');
+      span.className = 'demo-interval';
+      span.style.left = left + '%';
+      span.style.width = width + '%';
+      const tip = item.t + 'ms • ' + item.d + 'ms';
+      span.setAttribute('data-tip', tip);
+      demoTimelineEl.appendChild(span);
+    });
+  }
+
+  function showSnackbar(msg, ms){
+    if (!snackbarEl) return;
+    snackbarEl.textContent = msg;
+    snackbarEl.classList.add('visible');
+    clearTimeout(snackbarEl._hideId);
+    snackbarEl._hideId = setTimeout(function(){ snackbarEl.classList.remove('visible'); }, ms || 2000);
+  }
+
+  function saveDemoSample(){
+    try{
+      localStorage.setItem('lastDemoSample', JSON.stringify(demoIntervals || []));
+      showSnackbar('Demo saved');
+    }catch(e){ showSnackbar('Save failed'); }
+  }
+
+  function loadDemoSample(){
+    try{
+      const raw = localStorage.getItem('lastDemoSample');
+      if (!raw){ showSnackbar('No saved demo'); return; }
+      demoIntervals = JSON.parse(raw);
+      renderDemoTimeline();
+      showSnackbar('Demo loaded');
+    }catch(e){ showSnackbar('Load failed'); }
+  }
+
+  function exportDemoSample(){
+    if (!demoIntervals || !demoIntervals.length){ showSnackbar('No demo to export'); return; }
+    try{
+      const blob = new Blob([JSON.stringify(demoIntervals, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'demo-sample.json'; document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      showSnackbar('Exported demo');
+    }catch(e){ showSnackbar('Export failed'); }
+  }
+
+  function playDemo(durationSec, modeOverride){
+    // Don't run demo while a real round is active
+    if (isPlaying) return;
+    clearDemo();
+    ensureAudio();
+    const start = performance.now();
+    const endAt = start + (durationSec || 8000);
+    clearDemoTimeline();
+
+    function demoTick(){
+      const now = performance.now();
+      const progress = Math.min(1, (now - start) / (endAt - start));
+      const interval = getNextBeepInterval(progress, modeOverride) * (1.0 + (randomUnit() - 0.5) * 0.2);
+      playBeep(progress);
+      firePulse(interval);
+      triggerHaptic(8);
+      // record interval on timeline (ms)
+      addDemoInterval(Math.round(now - start), Math.round(interval * 1000));
+
+      if (now + interval * 1000 < endAt){
+        const id = setTimeout(demoTick, Math.max(40, interval * 1000));
+        demoTimeouts.push(id);
+      }
+    }
+
+    demoTick();
+    // safety clear after duration
+    demoTimeouts.push(setTimeout(function(){
+      clearDemo();
+      // persist last demo sample automatically
+      try{ localStorage.setItem('lastDemoSample', JSON.stringify(demoIntervals || [])); showSnackbar('Demo saved'); }catch(e){}
+    }, durationSec || 8000));
+  }
+
+  function explode(){
+    isPlaying = false;
+    clearTimeout(beepTimeoutId);
+    cancelAnimationFrame(rafId);
+    pulseRing.classList.remove('fire');
+    bombSvg.classList.remove('fire');
+
+    triggerHaptic([18, 45, 18]);
+    playExplosion();
+
+    flashOverlay.classList.remove('fire');
+    void flashOverlay.offsetWidth;
+    flashOverlay.classList.add('fire');
+
+    document.body.classList.remove('exploded');
+    void document.body.offsetWidth;
+    document.body.classList.add('exploded');
+
+    const eliminatedName = activePlayers.shift() || 'Player ' + currentRound;
+    eliminationHistory.push(eliminatedName);
+    renderStatusPanel();
+
+    const isLastRound = currentRound >= totalRounds || activePlayers.length <= 0;
+
+    if (isLastRound){
+      const winnerName = activePlayers.length ? activePlayers[0] : 'No one';
+      boomSub.innerHTML = '<strong>' + escapeHtml(eliminatedName) + '</strong> is out. <strong>' + escapeHtml(winnerName) + '</strong> survives.';
+      btnAgain.style.display = 'none';
+      btnCancelAuto.style.display = 'none';
+      showScreen('explosion');
+      speak('Boom. All ' + totalRounds + ' rounds complete.');
+      sequenceTimeouts.push(setTimeout(function(){
+        showScreen('complete');
+      }, 1800));
+      return;
+    }
+
+    const nextHolder = activePlayers[0] || 'the next player';
+    boomSub.innerHTML = '<strong>' + escapeHtml(eliminatedName) + '</strong> is out. Next up: <strong>' + escapeHtml(nextHolder) + '</strong>.';
+    speak('Boom! Round ' + currentRound + ' down.');
+
+    if (autoToggle.checked){
+      // Auto mode: no button needed to continue — show the
+      // explosion beat, then flow straight into the spoken
+      // 10-to-1 countdown, then auto-start the next round.
+      btnAgain.style.display = 'none';
+      btnCancelAuto.style.display = 'block';
+      showScreen('explosion');
+      sequenceTimeouts.push(setTimeout(function(){
+        currentRound += 1;
+        beginCountdown();
+      }, 1600));
+    } else {
+      // Manual mode: wait for the player to press Next Round.
+      btnAgain.style.display = 'block';
+      btnCancelAuto.style.display = 'none';
+      btnAgain.textContent = 'Next Round';
+      showScreen('explosion');
+    }
+  }
+
+  /* ============================================================
+     AUTO-RESTART COUNTDOWN (10 → 1, spoken + visual)
+     ============================================================ */
+  function beginCountdown(){
+    triggerHaptic([10]);
+    countdownRoundNumEl.textContent = String(currentRound);
+    let n = 10;
+    countdownNumberEl.textContent = String(n);
+    showScreen('countdown');
+    speak('Restarting in ' + n);
+    tickCountdown(n);
+  }
+
+  function tickCountdown(n){
+    sequenceTimeouts.push(setTimeout(function(){
+      n -= 1;
+      if (n <= 0){
+        startRound();
+        return;
+      }
+      countdownNumberEl.textContent = String(n);
+      // re-trigger the pop-in animation
+      countdownNumberEl.style.animation = 'none';
+      void countdownNumberEl.offsetWidth;
+      countdownNumberEl.style.animation = '';
+      speak(String(n));
+      tickCountdown(n);
+    }, 1000));
+  }
+
+  function playAgainManual(){
+    currentRound += 1;
+    startRound();
+  }
+
+  function cancelAutoSequence(){
+    clearSequenceTimeouts();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    playerNames = [];
+    activePlayers = [];
+    eliminationHistory = [];
+    currentRound = 1;
+    renderStatusPanel();
+    showScreen('idle');
+  }
+
+  function newGame(){
+    playerNames = [];
+    activePlayers = [];
+    eliminationHistory = [];
+    currentRound = 1;
+    renderStatusPanel();
+    showScreen('idle');
+  }
+
+  /* ============================================================
+     UI WIRING
+     ============================================================ */
+  btnStart.addEventListener('click', beginGame);
+  btnStop.addEventListener('click', stopAndReset);
+  btnAgain.addEventListener('click', playAgainManual);
+  btnCancelAuto.addEventListener('click', cancelAutoSequence);
+  btnCancelCountdown.addEventListener('click', cancelAutoSequence);
+  btnNewGame.addEventListener('click', newGame);
+  const btnDemoClassic = document.getElementById('btn-demo-classic');
+  const btnDemoSurvival = document.getElementById('btn-demo-survival');
+  const btnDemoChaos = document.getElementById('btn-demo-chaos');
+  if (btnDemoClassic) btnDemoClassic.addEventListener('click', function(){ playDemo(8000, 'classic'); });
+  if (btnDemoSurvival) btnDemoSurvival.addEventListener('click', function(){ playDemo(8000, 'survival'); });
+  if (btnDemoChaos) btnDemoChaos.addEventListener('click', function(){ playDemo(8000, 'chaos'); });
+  if (btnSaveDemo) btnSaveDemo.addEventListener('click', saveDemoSample);
+  if (btnLoadDemo) btnLoadDemo.addEventListener('click', loadDemoSample);
+  if (btnExportDemo) btnExportDemo.addEventListener('click', exportDemoSample);
+
+  volumeSlider.addEventListener('input', function(){
+    volumeValueEl.textContent = volumeSlider.value + '%';
+    if (masterGain){
+      masterGain.gain.value = Number(volumeSlider.value) / 100;
+    }
+  });
+
+  // Slider bindings + persistence
+  function saveSetting(key, value){
+    try{ localStorage.setItem(key, String(value)); }catch(e){}
+  }
+  function loadSetting(key, fallback){
+    try{ const v = localStorage.getItem(key); return v === null ? fallback : v; }catch(e){ return fallback; }
+  }
+
+  if (clusterFreqEl && clusterFreqValueEl){
+    clusterFreqEl.value = loadSetting('clusterFreq', clusterFreqEl.value);
+    clusterFreqValueEl.textContent = clusterFreqEl.value + '%';
+    clusterFreqEl.addEventListener('input', function(){
+      clusterFreqValueEl.textContent = clusterFreqEl.value + '%';
+      saveSetting('clusterFreq', clusterFreqEl.value);
+    });
+  }
+
+  if (pauseStrengthEl && pauseStrengthValueEl){
+    pauseStrengthEl.value = loadSetting('pauseStrength', pauseStrengthEl.value);
+    pauseStrengthValueEl.textContent = pauseStrengthEl.value + '%';
+    pauseStrengthEl.addEventListener('input', function(){
+      pauseStrengthValueEl.textContent = pauseStrengthEl.value + '%';
+      saveSetting('pauseStrength', pauseStrengthEl.value);
+    });
+  }
+
+  if (clusterSizeEl && clusterSizeValueEl){
+    clusterSizeEl.value = loadSetting('clusterSize', clusterSizeEl.value);
+    clusterSizeValueEl.textContent = clusterSizeEl.value;
+    clusterSizeEl.addEventListener('input', function(){
+      clusterSizeValueEl.textContent = clusterSizeEl.value;
+      saveSetting('clusterSize', clusterSizeEl.value);
+    });
+  }
+
+  // Preset storage
+  const DEFAULT_PRESETS = {
+    Default: { clusterFreq: 10, pauseStrength: 20, clusterSize: 3 },
+    Intense: { clusterFreq: 45, pauseStrength: 8, clusterSize: 5 },
+    Chill:   { clusterFreq: 5,  pauseStrength: 45, clusterSize: 2 }
+  };
+
+  function loadPresets(){
+    try{
+      const raw = localStorage.getItem('presets_v1');
+      const parsed = raw ? JSON.parse(raw) : null;
+      return Object.assign({}, DEFAULT_PRESETS, parsed || {});
+    }catch(e){ return Object.assign({}, DEFAULT_PRESETS); }
+  }
+  function savePresets(presets){
+    try{ localStorage.setItem('presets_v1', JSON.stringify(presets)); }catch(e){}
+  }
+
+  let presets = loadPresets();
+
+  function populatePresetSelect(){
+    if (!presetSelect) return;
+    const keys = Object.keys(presets);
+    presetSelect.innerHTML = '';
+    keys.forEach(function(k){
+      const opt = document.createElement('option'); opt.value = k; opt.textContent = k; presetSelect.appendChild(opt);
+    });
+  }
+
+  function applyPreset(name){
+    if (!presets[name]) return;
+    const p = presets[name];
+    if (clusterFreqEl) { clusterFreqEl.value = p.clusterFreq; clusterFreqValueEl.textContent = clusterFreqEl.value + '%'; saveSetting('clusterFreq', clusterFreqEl.value); }
+    if (pauseStrengthEl) { pauseStrengthEl.value = p.pauseStrength; pauseStrengthValueEl.textContent = pauseStrengthEl.value + '%'; saveSetting('pauseStrength', pauseStrengthEl.value); }
+    if (clusterSizeEl) { clusterSizeEl.value = p.clusterSize; clusterSizeValueEl.textContent = clusterSizeEl.value; saveSetting('clusterSize', clusterSizeEl.value); }
+    showSnackbar('Applied preset: ' + name);
+  }
+
+  // init presets UI
+  populatePresetSelect();
+  if (presetSelect){ presetSelect.addEventListener('change', function(){ applyPreset(presetSelect.value); }); }
+  if (btnSavePreset){ btnSavePreset.addEventListener('click', function(){
+    const name = prompt('Preset name:', 'Custom'); if (!name) return;
+    presets[name] = { clusterFreq: Number(clusterFreqEl.value), pauseStrength: Number(pauseStrengthEl.value), clusterSize: Number(clusterSizeEl.value) };
+    savePresets(presets); populatePresetSelect(); presetSelect.value = name; showSnackbar('Saved preset: ' + name);
+  }); }
+  if (btnResetPresets){ btnResetPresets.addEventListener('click', function(){ presets = Object.assign({}, DEFAULT_PRESETS); savePresets(presets); populatePresetSelect(); applyPreset('Default'); showSnackbar('Presets reset'); }); }
+
+  [minInput, maxInput, playersInput].forEach(function(el){
+    el.addEventListener('change', validateSettings);
+  });
+
+  gameModeSelect.addEventListener('change', function(){
+    gameMode = gameModeSelect.value;
+    renderStatusPanel();
+  });
+
+  playerNamesInput.addEventListener('input', renderStatusPanel);
+
+  // Initialize fuse spark position and round total display at rest.
+  updateFuseVisual(0);
+  roundTotalEl.textContent = playersInput.value;
+  playersInput.addEventListener('input', function(){
+    roundTotalEl.textContent = playersInput.value;
+    renderStatusPanel();
+  });
+  renderStatusPanel();
+})();
+</script>
 </body>
 </html>
